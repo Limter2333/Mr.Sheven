@@ -62,15 +62,25 @@ def patch_job() -> None:
     logger.info("[patch_job] Done.")
 
 
+def daily_report_job() -> None:
+    """08:00 - 生成并推送日报."""
+    logger.info("[daily_report] Starting...")
+    from pipeline.monitor import run_daily_report
+
+    run_daily_report()
+    logger.info("[daily_report] Done.")
+
+
 def main() -> None:
-    """Start the APScheduler with three nightly jobs."""
+    """Start the APScheduler with four nightly jobs."""
     scheduler = BlockingScheduler()
 
     scheduler.add_job(crawl_job, CronTrigger(hour=21, minute=30), id="crawl")
     scheduler.add_job(batch_job, CronTrigger(hour=22, minute=0), id="batch")
     scheduler.add_job(patch_job, CronTrigger(hour=3, minute=0), id="patch")
+    scheduler.add_job(daily_report_job, CronTrigger(hour=8, minute=0), id="daily_report")
 
-    logger.info("Scheduler started. Jobs: crawl(21:30), batch(22:00), patch(03:00)")
+    logger.info("Scheduler started. Jobs: crawl(21:30), batch(22:00), patch(03:00), report(08:00)")
 
     try:
         scheduler.start()
