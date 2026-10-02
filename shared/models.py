@@ -14,7 +14,6 @@ from sqlalchemy import (
     JSON,
     SMALLINT,
     TEXT,
-    TINYINT,
     VARCHAR,
     Date,
     DateTime,
@@ -86,7 +85,7 @@ class Barcode(Base):
 
     code: Mapped[str] = mapped_column(VARCHAR(32), primary_key=True)  # EAN-13/UPC
     spu_id: Mapped[Optional[int]] = mapped_column(BIGINT, ForeignKey("spu.id"))
-    is_non_wine: Mapped[int] = mapped_column(TINYINT, default=0)
+    is_non_wine: Mapped[int] = mapped_column(SMALLINT, server_default="0")
     category_hint: Mapped[Optional[str]] = mapped_column(VARCHAR(50))
     raw_json: Mapped[Optional[dict]] = mapped_column(JSON)
     source: Mapped[Optional[str]] = mapped_column(VARCHAR(20))
@@ -148,7 +147,7 @@ class Review(Base):
     score_type: Mapped[Optional[str]] = mapped_column(VARCHAR(20))  # pct100/scale10/none
     verdict: Mapped[Optional[str]] = mapped_column(VARCHAR(10))  # recommend/neutral/avoid
     flavor_tags: Mapped[Optional[list]] = mapped_column(JSON)
-    recommend_index: Mapped[Optional[int]] = mapped_column(TINYINT)
+    recommend_index: Mapped[Optional[int]] = mapped_column(SMALLINT)
     quote: Mapped[Optional[str]] = mapped_column(TEXT)
     ts_start: Mapped[Optional[int]] = mapped_column(INT)
     ts_end: Mapped[Optional[int]] = mapped_column(INT)
@@ -156,7 +155,7 @@ class Review(Base):
     trend_reason: Mapped[Optional[str]] = mapped_column(VARCHAR(500))
     prev_review_id: Mapped[Optional[int]] = mapped_column(BIGINT)  # 演变链
     confidence: Mapped[Optional[Decimal]] = mapped_column(DECIMAL(3, 2))
-    is_latest: Mapped[int] = mapped_column(TINYINT, default=1)
+    is_latest: Mapped[int] = mapped_column(SMALLINT, default=1)
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
 
     # Relationships
