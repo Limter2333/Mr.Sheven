@@ -14,13 +14,16 @@ from datetime import datetime
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from shared.config import config
 from shared.db import get_db
 from shared.models import Barcode, Review, SPU, SPUAlias, ScanLog
+from server.app.cache.multi_cache import cache_get, cache_put
+from server.app.ratelimit.limiter import check_rate_limit
 
 logger = logging.getLogger("server.scan")
 router = APIRouter()
@@ -34,9 +37,10 @@ STATUS_NOT_FOUND = "NOT_FOUND"
 
 @router.get("/scan")
 async def scan_barcode(
+    request: Request,
     barcode: str = Query(..., description="EAN-13/UPC barcode"),
     db: Session = Depends(get_db),
-) -> dict[str, Any]:
+) -> dict[str, Any] | JSONResponse:
     """Main barcode scan endpoint.
 
     Flow (from 06 doc section 六):
@@ -47,21 +51,37 @@ async def scan_barcode(
         5. Associate reviews
         6. Assemble response
     """
-    # Step 1: Rate limiting (simplified for MVP)
-    # TODO: implement Redis-based rate limiting
+    # Step 1: Rate limiting
+    client_ip = request.client.host if request.client else "unknown"
+    if not await check_rate_limit(client_ip):
+        return JSONResponse(
+            status_code=429,
+            content={"error": "Rate limit exceeded. Try again later."},
+        )
 
-    # Step 2: Check cache (simplified - just DB for now)
+    # Step 2: L1/L2 cache check
+    cached = await cache_get(barcode)
+    if cached:
+        return cached
+
+    # Step 3: Check DB
     barcode_record = db.execute(
         select(Barcode).where(Barcode.code == barcode)
     ).scalars().first()
 
     if barcode_record:
         if barcode_record.is_non_wine:
-            return _make_response(STATUS_NOT_WINE, barcode=barcode)
+            resp = _make_response(STATUS_NOT_WINE, barcode=barcode)
+            await cache_put(barcode, resp, ttl=604800)  # 7 days
+            return resp
         if barcode_record.spu_id:
-            return _assemble_response(db, barcode_record.spu_id, barcode)
-        # Known barcode but no SPU - check if we have reviews
-        return _make_response(STATUS_NOT_FOUND, barcode=barcode)
+            resp = _assemble_response(db, barcode_record.spu_id, barcode)
+            await cache_put(barcode, resp, ttl=604800)  # 7 days
+            return resp
+        # Known barcode but no SPU
+        resp = _make_response(STATUS_NOT_FOUND, barcode=barcode)
+        await cache_put(barcode, resp, ttl=300)  # 5 min (empty marker)
+        return resp
 
     # Step 3: Query third-party barcode API
     api_result = await _query_barcode_api(barcode)
@@ -70,13 +90,17 @@ async def scan_barcode(
         # Not found in API
         _save_barcode(db, barcode, is_non_wine=False, source="api")
         _log_scan(db, barcode, STATUS_NOT_FOUND)
-        return _make_response(STATUS_NOT_FOUND, barcode=barcode)
+        resp = _make_response(STATUS_NOT_FOUND, barcode=barcode)
+        await cache_put(barcode, resp, ttl=300)  # 5 min empty marker
+        return resp
 
     if not api_result.get("is_wine", True):
         # Not a wine product
         _save_barcode(db, barcode, is_non_wine=True, source="api", raw=api_result)
         _log_scan(db, barcode, STATUS_NOT_WINE)
-        return _make_response(STATUS_NOT_WINE, barcode=barcode)
+        resp = _make_response(STATUS_NOT_WINE, barcode=barcode)
+        await cache_put(barcode, resp, ttl=604800)  # 7 days
+        return resp
 
     # Step 4: Save wine info and try to match SPU
     spu = _match_or_create_spu(db, api_result)
@@ -84,10 +108,14 @@ async def scan_barcode(
 
     # Step 5 & 6: Associate reviews and respond
     if spu:
-        return _assemble_response(db, spu.id, barcode)
+        resp = _assemble_response(db, spu.id, barcode)
+        await cache_put(barcode, resp, ttl=604800)
+        return resp
 
     _log_scan(db, barcode, STATUS_NOT_FOUND)
-    return _make_response(STATUS_NOT_FOUND, barcode=barcode)
+    resp = _make_response(STATUS_NOT_FOUND, barcode=barcode)
+    await cache_put(barcode, resp, ttl=300)
+    return resp
 
 
 @router.get("/spu/{spu_id}/reviews")
