@@ -23,21 +23,42 @@ logger = logging.getLogger("pipeline.scheduler")
 def crawl_job() -> None:
     """21:30 - 拉取博主视频列表，新视频元数据入 video_review（轻量）."""
     logger.info("[crawl_job] Starting...")
-    # TODO: implement crawler.pipeline_crawl()
+    from shared.db import SessionLocal
+    from pipeline.runner import run_crawl
+
+    db = SessionLocal()
+    try:
+        run_crawl(db)
+    finally:
+        db.close()
     logger.info("[crawl_job] Done.")
 
 
 def batch_job() -> None:
     """22:00 - 夜间跑批：字幕→清洗→查重→LLM→归一化."""
     logger.info("[batch_job] Starting...")
-    # TODO: implement full pipeline
+    from shared.db import SessionLocal
+    from pipeline.runner import run_pipeline
+
+    db = SessionLocal()
+    try:
+        run_pipeline(db)
+    finally:
+        db.close()
     logger.info("[batch_job] Done.")
 
 
 def patch_job() -> None:
     """03:00 - 补录 NO_SUBTITLE 视频再试字幕."""
     logger.info("[patch_job] Starting...")
-    # TODO: implement subtitle retry
+    from shared.db import SessionLocal
+    from pipeline.runner import run_patch
+
+    db = SessionLocal()
+    try:
+        run_patch(db)
+    finally:
+        db.close()
     logger.info("[patch_job] Done.")
 
 
