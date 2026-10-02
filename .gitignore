@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment / Secrets
+.env
+.env.*
+secrets/
+cookies.txt
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Probe experiment outputs (keep audio, ignore generated files)
+probe/**/*.json
+probe/**/*.txt
+probe/**/*.xlsx
+probe/**/*.csv
+
+# Docker
+deploy/mysql/data/
+deploy/redis/data/
+
+# Flutter
+app/.dart_tool/
+app/.packages
+app/build/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/pubspec.lock
