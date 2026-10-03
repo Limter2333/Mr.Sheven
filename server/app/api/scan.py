@@ -35,12 +35,12 @@ STATUS_NOT_WINE = "NOT_WINE"
 STATUS_NOT_FOUND = "NOT_FOUND"
 
 
-@router.get("/scan")
+@router.get("/scan", response_model=None)
 async def scan_barcode(
     request: Request,
     barcode: str = Query(..., description="EAN-13/UPC barcode"),
     db: Session = Depends(get_db),
-) -> dict[str, Any] | JSONResponse:
+):
     """Main barcode scan endpoint.
 
     Flow (from 06 doc section 六):

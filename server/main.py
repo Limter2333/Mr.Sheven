@@ -1,4 +1,4 @@
-"""Server entry point: uvicorn server.app:app"""
+"""Server entry point: uvicorn server.main:app"""
 
 from server.app import create_app
 

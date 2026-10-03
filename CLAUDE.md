@@ -12,7 +12,7 @@ Mr.Sheven/
 │   ├── dedup/       # 三层查重
 │   ├── llm/         # LLM结构化提取与对比研判
 │   └── normalize/   # SPU归一化入库
-├── server/          # FastAPI查询服务（入口 uvicorn server.app:app）
+├── server/          # FastAPI查询服务（入口 uvicorn server.main:app）
 ├── tests/           # 测试
 ├── deploy/          # Docker Compose、nginx、alembic迁移
 ├── docs/            # 项目文档
