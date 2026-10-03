@@ -15,6 +15,8 @@ RUN uv pip install --system --no-cache .
 COPY shared/ shared/
 COPY pipeline/ pipeline/
 COPY server/ server/
+COPY alembic/ alembic/
+COPY alembic.ini .
 
 # Create non-root user
 RUN useradd -m appuser && chown -R appuser:appuser /app

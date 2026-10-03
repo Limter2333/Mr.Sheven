@@ -13,9 +13,13 @@ Mr.Sheven/
 │   ├── llm/         # LLM结构化提取与对比研判
 │   └── normalize/   # SPU归一化入库
 ├── server/          # FastAPI查询服务（入口 uvicorn server.main:app）
+│   ├── api/         # 路由定义
+│   └── middleware/   # 缓存 + 限流
+├── alembic/         # 数据库迁移（alembic upgrade head）
 ├── tests/           # 测试
-├── deploy/          # Docker Compose、nginx、alembic迁移
+├── deploy/          # Docker Compose、nginx
 ├── docs/            # 项目文档
+├── app/             # Flutter 前端
 └── probe/           # 探针实验物料
 ```
 

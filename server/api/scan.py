@@ -22,8 +22,8 @@ from sqlalchemy.orm import Session
 from shared.config import config
 from shared.db import get_db
 from shared.models import Barcode, Review, SPU, SPUAlias, ScanLog
-from server.app.cache.multi_cache import cache_get, cache_put
-from server.app.ratelimit.limiter import check_rate_limit
+from server.middleware.multi_cache import cache_get, cache_put
+from server.middleware.limiter import check_rate_limit
 
 logger = logging.getLogger("server.scan")
 router = APIRouter()
