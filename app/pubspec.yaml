@@ -13,6 +13,7 @@ dependencies:
   mobile_scanner: ^5.1.0
   # HTTP client
   http: ^1.2.0
+  http_parser: ^4.1.0
   # State management
   provider: ^6.1.0
   # Local storage
@@ -21,6 +22,8 @@ dependencies:
   url_launcher: ^6.2.0
   # Camera (for future OCR)
   camera: ^0.11.0
+  # 拍酒标（裁决 C12：OCR 中文背标主路径）
+  image_picker: ^1.1.0
   # Permissions
   permission_handler: ^11.3.0
 

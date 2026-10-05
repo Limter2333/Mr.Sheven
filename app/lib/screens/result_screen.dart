@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mr_sheven/models/scan_result.dart';
 import 'package:mr_sheven/screens/feedback_screen.dart';
+import 'package:mr_sheven/services/label_scan_flow.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class ResultScreen extends StatelessWidget {
@@ -45,6 +46,11 @@ class ResultScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // SERIES 命中：显式标注"博主评测的是同系列另一款"（裁决 C12）
+        if (result.isSeries) ...[
+          _buildSeriesBanner(context),
+          const SizedBox(height: 12),
+        ],
         // Wine info card
         Card(
           child: Padding(
@@ -224,6 +230,10 @@ class ResultScreen extends StatelessWidget {
 
     return Column(
       children: [
+        if (result.isSeries) ...[
+          _buildSeriesBanner(context),
+          const SizedBox(height: 12),
+        ],
         if (wine != null) ...[
           Card(
             child: Padding(
@@ -300,11 +310,14 @@ class ResultScreen extends StatelessWidget {
   Widget _buildNotWine(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Center(
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        minHeight: MediaQuery.of(context).size.height * 0.6,
+      ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const SizedBox(height: 60),
+          const SizedBox(height: 40),
           Icon(
             Icons.local_bar,
             size: 64,
@@ -328,7 +341,41 @@ class ResultScreen extends StatelessWidget {
             icon: const Icon(Icons.qr_code_scanner),
             label: const Text('重新扫描'),
           ),
+          const SizedBox(height: 24),
         ],
+      ),
+    );
+  }
+
+  /// SERIES 命中警示条：不冒充同款，结论仅供参考（裁决 C12）
+  Widget _buildSeriesBanner(BuildContext context) {
+    final theme = Theme.of(context);
+    final scanned = result.ocrProductName ?? '你拍的酒';
+    final reviewed = result.wine?.name ?? '博主评测的酒';
+
+    return Card(
+      color: const Color(0xFFFFF3E0),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(
+              Icons.warning_amber_rounded,
+              color: Color(0xFFE65100),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '你拍的是「$scanned」，博主评测的是同系列另一款「$reviewed」，结论仅供参考',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: const Color(0xFFE65100),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -337,11 +384,14 @@ class ResultScreen extends StatelessWidget {
   Widget _buildNotFound(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Center(
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        minHeight: MediaQuery.of(context).size.height * 0.6,
+      ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const SizedBox(height: 60),
+          const SizedBox(height: 40),
           Icon(
             Icons.search_off,
             size: 64,
@@ -354,13 +404,20 @@ class ResultScreen extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            '这可能是未收录的冷门酒或商品码已失效',
+            '这可能是未收录的冷门酒或商品码已失效。\n也可以拍中文背标识别（进口酒条码常查不到）',
+            textAlign: TextAlign.center,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 24),
           ElevatedButton.icon(
+            onPressed: () => startLabelScan(context),
+            icon: const Icon(Icons.photo_camera_back),
+            label: const Text('拍中文背标识别'),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
             onPressed: () {
               Navigator.push(
                 context,
@@ -378,6 +435,7 @@ class ResultScreen extends StatelessWidget {
             icon: const Icon(Icons.qr_code_scanner),
             label: const Text('重新扫描'),
           ),
+          const SizedBox(height: 24),
         ],
       ),
     );

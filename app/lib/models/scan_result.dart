@@ -7,11 +7,23 @@ class ScanResult {
   final List<ReviewData> reviews;
   final List<FallbackItem> fallback;
 
+  /// 三档匹配（拍酒标链路，裁决 C12）：EXACT / SERIES / NONE
+  final String? matchLevel;
+
+  /// OCR 提取的背标字段（product_name/brand/country/abv/...，可空字段为 null）
+  final Map<String, dynamic>? ocrFields;
+
+  /// 匹配理由 / 提示语
+  final String? reason;
+
   ScanResult({
     required this.status,
     this.wine,
     this.reviews = const [],
     this.fallback = const [],
+    this.matchLevel,
+    this.ocrFields,
+    this.reason,
   });
 
   factory ScanResult.fromJson(Map<String, dynamic> json) {
@@ -26,6 +38,11 @@ class ScanResult {
               ?.map((f) => FallbackItem.fromJson(f))
               .toList() ??
           [],
+      matchLevel: json['match_level'],
+      ocrFields: json['ocr_fields'] is Map<String, dynamic>
+          ? json['ocr_fields'] as Map<String, dynamic>
+          : null,
+      reason: json['reason'],
     );
   }
 
@@ -33,6 +50,13 @@ class ScanResult {
   bool get isNotFound => status == 'NOT_FOUND';
   bool get isNotWine => status == 'NOT_WINE';
   bool get hasNoReview => status == 'HIT_NO_REVIEW';
+
+  /// 同系列不同款命中（SERIES）：评测可展示但必须显著标注"仅供参考"
+  bool get isSeries => matchLevel == 'SERIES';
+
+  /// 拍到的酒名（OCR 提取），SERIES 标注用
+  String? get ocrProductName =>
+      ocrFields?['product_name'] as String?;
 }
 
 class WineInfo {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
 import 'package:mr_sheven/services/api_service.dart';
+import 'package:mr_sheven/services/label_scan_flow.dart';
 import 'package:mr_sheven/screens/result_screen.dart';
 
 class ScanScreen extends StatefulWidget {
@@ -69,9 +70,48 @@ class _ScanScreenState extends State<ScanScreen> {
   }
 
   bool _isValidBarcode(String code) {
-    // EAN-13: 13 digits, UPC-A: 12 digits
+    // UPC-A: 12 digits, EAN-13: 13 digits, ITF-14 (国内): 14 digits
     final clean = code.replaceAll(RegExp(r'[^0-9]'), '');
-    return clean.length == 12 || clean.length == 13;
+    return clean.length >= 12 && clean.length <= 14;
+  }
+
+  void _showManualInput() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('手动输入条码'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: '输入 12-13 位数字条码',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final code = controller.text.trim();
+              Navigator.pop(ctx);
+              if (_isValidBarcode(code)) {
+                _onBarcodeDetected(BarcodeCapture(
+                  barcodes: [Barcode(rawValue: code, format: BarcodeFormat.ean13)],
+                ));
+              } else {
+                _showSnackBar('条码格式无效，需 12-13 位数字');
+              }
+            },
+            child: const Text('查询'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showSnackBar(String message) {
@@ -106,7 +146,7 @@ class _ScanScreenState extends State<ScanScreen> {
               children: [
                 MobileScanner(
                   controller: _controller!,
-                  onBarcodeDetected: _onBarcodeDetected,
+                  onDetect: _onBarcodeDetected,
                 ),
                 // Scan overlay
                 Center(
@@ -127,40 +167,65 @@ class _ScanScreenState extends State<ScanScreen> {
                   Container(
                     color: Colors.black54,
                     child: const Center(
-                      child: CircularProgressIndicator(color: Colors.white),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircularProgressIndicator(color: Colors.white),
+                          SizedBox(height: 16),
+                          Text(
+                            '正在查询条码…',
+                            style: TextStyle(color: Colors.white, fontSize: 15),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
               ],
             ),
           ),
 
-          // Instructions
-          Expanded(
-            flex: 1,
-            child: Container(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.qr_code_scanner,
-                    size: 32,
-                    color: theme.colorScheme.primary,
+          // Instructions + manual input
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.qr_code_scanner,
+                  size: 28,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '将酒瓶条形码对准扫描框',
+                  style: theme.textTheme.titleMedium,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '支持 EAN-13 / UPC-A 格式',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '将酒瓶条形码对准扫描框',
-                    style: theme.textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                TextButton.icon(
+                  onPressed: _showManualInput,
+                  icon: const Icon(Icons.keyboard, size: 18),
+                  label: const Text('手动输入条码'),
+                ),
+                const SizedBox(height: 4),
+                TextButton.icon(
+                  onPressed: () => startLabelScan(context),
+                  icon: const Icon(Icons.photo_camera_back, size: 18),
+                  label: const Text('拍酒标识别（推荐）'),
+                ),
+                Text(
+                  '进口酒条码常查不到？拍中文背标也能识别',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '支持 EAN-13 / UPC-A 格式',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ],
