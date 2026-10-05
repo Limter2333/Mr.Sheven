@@ -24,24 +24,24 @@ env/
 .env.*
 secrets/
 cookies.txt
+cookie.txt
+cookies_netscape.txt
 
 # Database
 *.db
 *.sqlite
 *.sqlite3
 
-# Logs
+# Logs（运行日志统一在 logs/{backend,pipeline,frontend}/ 下，不入库）
 *.log
+logs/
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Probe experiment outputs (keep audio, ignore generated files)
-probe/**/*.json
-probe/**/*.txt
-probe/**/*.xlsx
-probe/**/*.csv
+# Probe experiment materials（探针实验物料，整目录不入库）
+probe/
 
 # Docker
 deploy/mysql/data/
@@ -54,3 +54,7 @@ app/build/
 app/.flutter-plugins
 app/.flutter-plugins-dependencies
 app/pubspec.lock
+app/android/local.properties
+app/ios/Flutter/Generated.xcconfig
+app/ios/Flutter/ephemeral/
+app/ios/Flutter/flutter_export_environment.sh

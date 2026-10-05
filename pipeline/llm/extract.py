@@ -20,11 +20,12 @@ from shared.config import config
 
 logger = logging.getLogger("pipeline.llm.extract")
 
-EXTRACTION_PROMPT = """你是酒类评测数据标注员。从以下转写文本中抽取所有被实际评测的酒款。
+EXTRACTION_PROMPT = """你是酒类评测数据标注员。从以下转写文本中抽取所有被**实际品尝并给出评价**的酒款。
 
-## 输出 Schema
-返回 JSON 数组，每个元素包含：
-- product_name_raw: 博主口中原话叫法（保留原始形态）
+## 输出格式
+严格返回一个 JSON 数组（即使只有一款酒也要用数组包裹），不要输出任何其他文字。
+每个元素包含：
+- product_name_raw: 博主口中原话叫法（保留原始形态，同一款酒全文只用一个最完整的叫法）
 - brand: 品牌（能推断则填，否则 null）
 - category: 品类 wine/whisky/gin/other（能推断则填，否则 null）
 - score_raw: 原始评分（如 "92", "8.5"，无评分则 null）
@@ -35,25 +36,48 @@ EXTRACTION_PROMPT = """你是酒类评测数据标注员。从以下转写文本
 - timestamp_end: 结束时间（秒）
 - confidence: 模型自评置信度 0.00~1.00
 
-## 三条纪律
-1. 只抽实际品尝/评测的酒，顺嘴提到的不算
-2. 任何字段拿不准填 null，禁止编造
-3. quote 必须逐字来自转写文本，不许改写
+## 什么算"实际评测"（✅ 抽取）
+必须同时满足以下两个条件：
+1. **喝到了**：博主亲自品尝了这款酒（"我们试一下""来一口""入口""喝""品"等动作）
+2. **有评价**：给出了口感/风味/质量/评分/推荐与否的判断（如"酸度不错""给85分""不推荐""有铁锈味"）
+
+## 什么算"顺嘴提到"（❌ 不抽取）
+以下情况一律**不要抽取**：
+- **没点/没喝**："上次有XX没点""想试试XX""下次喝XX"
+- **点单/报菜名**："来一杯XX""我们今天有XX""XX多少钱"——只说了名字和价格，没有口感评价
+- **餐前/餐后闲聊**：开胃酒、佐餐酒、利口酒等只是配角，博主没有正式品评
+- **事后回提**："刚才那个XX还行"——在评测完之后再次提到，不是新的评测
+- **对比/参照**："比XX好喝""像XX那种"——被拿来比较的酒不是本次评测对象
+
+## 同款酒去重规则
+- 同一款酒在全文中可能有不同叫法（简称、全称、昵称），只提取**一次**
+- product_name_raw 用博主**品测时**的叫法（通常是"我们第X只""这只XX"处的称呼）
+- 例如"兰布鲁斯科起泡酒"和"阿兰布鲁斯科"如果是同一款酒，只写一条
+
+## 其他纪律
+1. 任何字段拿不准填 null，禁止编造
+2. quote 必须逐字来自转写文本，不许改写
 
 ## 示例
+假设文本中有：
+- "上次有个麦卡伦12年没点" → ❌ 不抽（没喝）
+- "来一杯1987索阿维" → ❌ 不抽（点单，无评价）
+- "我们第一只就从这只麦卡伦12年双桶开始，入口雪莉桶味很浓，给8.5分" → ✅ 抽取
+
+正确输出：
 ```json
-[{
+[{{
   "product_name_raw": "麦卡伦12年双桶",
   "brand": "麦卡伦",
   "category": "whisky",
   "score_raw": "8.5",
   "score_type": "scale10",
   "verdict": "推荐",
-  "quote": "这款酒雪莉桶的味道很浓郁，性价比不错",
+  "quote": "入口雪莉桶味很浓，给8.5分",
   "timestamp_start": 120,
   "timestamp_end": 180,
   "confidence": 0.90
-}]
+}}]
 ```
 
 ## 转写文本
@@ -80,18 +104,20 @@ async def extract_reviews(text: str) -> list[dict[str, Any]]:
     prompt = EXTRACTION_PROMPT.format(text=text[:15000])  # Limit to ~15k chars
 
     try:
-        async with httpx.AsyncClient(timeout=120) as client:
+        async with httpx.AsyncClient(timeout=config.llm.timeout) as client:
             response = await client.post(
-                "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+                f"{config.llm.base_url}/chat/completions",
                 headers={
-                    "Authorization": f"Bearer {config.barcode_api.aliyun_key}",
+                    "Authorization": f"Bearer {config.llm.api_key}",
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "qwen-plus",
+                    "model": config.llm.model,
                     "messages": [{"role": "user", "content": prompt}],
-                    "temperature": 0.1,
+                    "temperature": config.llm.temperature,
+                    "max_tokens": config.llm.max_tokens,
                     "response_format": {"type": "json_object"},
+                    "enable_thinking": False,  # 关闭思考模式，避免超时
                 },
             )
             response.raise_for_status()
@@ -101,11 +127,19 @@ async def extract_reviews(text: str) -> list[dict[str, Any]]:
         # Parse JSON response
         result = json.loads(content)
 
-        # Handle both {"reviews": [...]} and [...] formats
-        if isinstance(result, dict):
-            reviews = result.get("reviews", result.get("data", []))
-        elif isinstance(result, list):
+        # Handle multiple formats: [...] | {"reviews": [...]} | {...single review...}
+        if isinstance(result, list):
             reviews = result
+        elif isinstance(result, dict):
+            if "reviews" in result:
+                reviews = result["reviews"]
+            elif "data" in result:
+                reviews = result["data"]
+            elif "product_name_raw" in result:
+                # Single review object, wrap in list
+                reviews = [result]
+            else:
+                reviews = []
         else:
             reviews = []
 
@@ -182,18 +216,20 @@ async def compare_reviews(
 }}"""
 
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=config.llm.timeout) as client:
             response = await client.post(
-                "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+                f"{config.llm.base_url}/chat/completions",
                 headers={
-                    "Authorization": f"Bearer {config.barcode_api.aliyun_key}",
+                    "Authorization": f"Bearer {config.llm.api_key}",
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "qwen-plus",
+                    "model": config.llm.model,
                     "messages": [{"role": "user", "content": prompt}],
-                    "temperature": 0.1,
+                    "temperature": config.llm.temperature,
+                    "max_tokens": config.llm.max_tokens,
                     "response_format": {"type": "json_object"},
+                    "enable_thinking": False,  # 关闭思考模式，避免超时
                 },
             )
             response.raise_for_status()

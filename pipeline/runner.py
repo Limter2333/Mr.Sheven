@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from pipeline.cleaner.cleaner import clean_subtitle_segments
@@ -28,22 +28,89 @@ from shared.models import VideoReview
 
 logger = logging.getLogger("pipeline.runner")
 
-# List of UP主 mids to track (configurable)
-UPLOADER_MIDS: list[int] = []  # TODO: load from config or DB
+
+def _get_uploader_mids() -> list[int]:
+    """Load UP主 mids from config (BILIBILI_UPLOADER_MIDS env var)."""
+    from shared.config import config
+
+    mids = config.bilibili.uploader_mids
+    if not mids:
+        logger.warning("[runner] No UPLOADER_MIDS configured. Set BILIBILI_UPLOADER_MIDS in .env")
+    return mids
 
 
-def run_crawl(db: Session) -> None:
-    """Step 1: Crawl UP主 video lists."""
-    for mid in UPLOADER_MIDS:
+def run_crawl(db: Session, max_pages: int = 2) -> None:
+    """Step 1: Crawl UP主 video lists with resume support.
+
+    Each run fetches at most max_pages pages to avoid rate limiting.
+    Uses max(pubdate) as cursor to resume exactly where it left off.
+
+    Args:
+        db: SQLAlchemy session
+        max_pages: Max pages per run (default 2 to avoid rate limiting)
+    """
+    import random
+    import time
+
+    from shared.models import VideoReview
+
+    for mid in _get_uploader_mids():
+        # Find the newest video we already have for this mid
+        last_pubdate = db.execute(
+            select(func.max(VideoReview.pubdate)).where(VideoReview.mid == mid)
+        ).scalar()
+
+        if last_pubdate:
+            logger.info("[runner] mid=%d: last pubdate=%s, fetching newer videos", mid, last_pubdate)
+        else:
+            logger.info("[runner] mid=%d: no existing data, starting from page 1", mid)
+
         page = 1
-        while True:
-            videos = fetch_video_list(mid, page=page, page_size=50)
+        pages_fetched = 0
+        while pages_fetched < max_pages:
+            result = fetch_video_list(mid, page=page, page_size=20)
+
+            if result.status == "rate_limited":
+                logger.warning("[runner] mid=%d: rate limited, stopping this round", mid)
+                break
+            if result.status == "blocked_412":
+                logger.warning("[runner] mid=%d: 412 blocked, stopping this round", mid)
+                break
+            if result.status == "error":
+                logger.warning("[runner] mid=%d: fetch error, stopping this round", mid)
+                break
+
+            videos = result.videos
             if not videos:
                 break
-            save_videos(db, videos)
-            if len(videos) < 50:
+
+            # Filter: only keep videos newer than what we already have
+            if last_pubdate:
+                new_videos = [v for v in videos if v["pubdate"] > last_pubdate]
+                if len(new_videos) < len(videos):
+                    logger.info(
+                        "[runner] mid=%d page=%d: %d/%d videos are new, rest already in DB",
+                        mid, page, len(new_videos), len(videos),
+                    )
+                if not new_videos:
+                    logger.info("[runner] mid=%d: caught up at page %d, all videos already in DB", mid, page)
+                    break
+                videos = new_videos
+
+            inserted = save_videos(db, videos)
+            pages_fetched += 1
+
+            if inserted == 0:
+                logger.info("[runner] mid=%d: 0 new inserts at page %d, stopping", mid, page)
                 break
+
             page += 1
+            # Long random delay between pages (30~60s) to avoid rate limiting
+            delay = random.uniform(30, 60)
+            logger.info("[runner] Page %d done for mid=%d (%d inserted), resting %.0fs", page - 1, mid, inserted, delay)
+            time.sleep(delay)
+
+        logger.info("[runner] Crawl finished: %d pages fetched for mid=%d", pages_fetched, mid)
 
 
 def run_pipeline(db: Session) -> None:

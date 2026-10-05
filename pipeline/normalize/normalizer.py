@@ -25,7 +25,7 @@ from rapidfuzz import fuzz
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from shared.models import Review, SPU, SPUAlias
+from shared.models import SPU, Review, SPUAlias
 
 logger = logging.getLogger("pipeline.normalize")
 
@@ -34,10 +34,30 @@ AUTO_BIND_THRESHOLD = 90
 DUP_SUSPECT_THRESHOLD = 75
 
 
+# ASR 口播语气词尾缀（如"奥兰小红帽珍藏哈"的"哈"），最多剥 2 个
+_ASR_TRAILING_PARTICLES = frozenset("哈啊呀哇嘛呢哦呗啦咯哟唉欸诶么")
+
+
+def _strip_asr_particles(name: str) -> str:
+    """剥离 ASR 转写带出的尾部语气词。
+
+    例："奥兰小红帽珍藏哈" → "奥兰小红帽珍藏"；"这只酒不错啊呀" → "这只酒不错"。
+    仅剥尾部、最多 2 个，且长度 >2 才剥，避免误伤正常酒名。
+    """
+    clean = name.strip()
+    for _ in range(2):
+        if len(clean) > 2 and clean[-1] in _ASR_TRAILING_PARTICLES:
+            clean = clean[:-1].rstrip()
+        else:
+            break
+    return clean
+
+
 def _normalize_name(name: str) -> str:
-    """Normalize wine name: lowercase, remove symbols."""
+    """Normalize wine name: lowercase, remove symbols, strip ASR particles."""
     clean = re.sub(r"[^\w\s]", "", name.lower())
-    return " ".join(clean.split()).strip()
+    clean = " ".join(clean.split()).strip()
+    return _strip_asr_particles(clean)
 
 
 def normalize_and_save(

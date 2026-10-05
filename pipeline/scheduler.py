@@ -1,9 +1,10 @@
 """Pipeline scheduler: APScheduler-based job runner.
 
 Jobs:
-    - 21:30  crawl_job      拉取博主视频列表
-    - 22:00  batch_job       夜间跑批（字幕→清洗→查重→LLM→归一化）
-    - 03:00  patch_job       补录 NO_SUBTITLE 视频
+    - every 20min  crawl_job       拉取博主视频列表（每次2页，避免限频）
+    - 22:00        batch_job       夜间跑批（字幕→清洗→查重→LLM→归一化）
+    - 03:00        patch_job       补录 NO_SUBTITLE 视频
+    - 08:00        daily_report    生成日报
 """
 
 from __future__ import annotations
@@ -12,23 +13,24 @@ import logging
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
+from shared.log_setup import setup_service_logging
+
+# 日志规范化：落盘 ./logs/pipeline/scheduler.log
+setup_service_logging("pipeline", filename="scheduler.log")
 logger = logging.getLogger("pipeline.scheduler")
 
 
 def crawl_job() -> None:
-    """21:30 - 拉取博主视频列表，新视频元数据入 video_review（轻量）."""
+    """Every 20min - 拉取博主视频列表（每次2页，断点续爬）."""
     logger.info("[crawl_job] Starting...")
     from shared.db import SessionLocal
     from pipeline.runner import run_crawl
 
     db = SessionLocal()
     try:
-        run_crawl(db)
+        run_crawl(db, max_pages=2)
     finally:
         db.close()
     logger.info("[crawl_job] Done.")
@@ -75,12 +77,12 @@ def main() -> None:
     """Start the APScheduler with four nightly jobs."""
     scheduler = BlockingScheduler()
 
-    scheduler.add_job(crawl_job, CronTrigger(hour=21, minute=30), id="crawl")
+    scheduler.add_job(crawl_job, IntervalTrigger(minutes=20), id="crawl")
     scheduler.add_job(batch_job, CronTrigger(hour=22, minute=0), id="batch")
     scheduler.add_job(patch_job, CronTrigger(hour=3, minute=0), id="patch")
     scheduler.add_job(daily_report_job, CronTrigger(hour=8, minute=0), id="daily_report")
 
-    logger.info("Scheduler started. Jobs: crawl(21:30), batch(22:00), patch(03:00), report(08:00)")
+    logger.info("Scheduler started. Jobs: crawl(every 20min), batch(22:00), patch(03:00), report(08:00)")
 
     try:
         scheduler.start()
