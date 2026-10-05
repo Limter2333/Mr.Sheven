@@ -200,7 +200,7 @@ class ScanLog(Base):
 
     id: Mapped[int] = mapped_column(BIGINT, primary_key=True, autoincrement=True)
     barcode: Mapped[Optional[str]] = mapped_column(VARCHAR(32))
-    result_type: Mapped[Optional[str]] = mapped_column(VARCHAR(20))  # HIT_REVIEW/HIT_NO_REVIEW/NOT_WINE/NOT_FOUND
+    result_type: Mapped[Optional[str]] = mapped_column(VARCHAR(20))  # HIT_REVIEW/HIT_NO_REVIEW/NOT_WINE/NOT_FOUND/SERIES
     ip_hash: Mapped[Optional[str]] = mapped_column(CHAR(64))
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
 

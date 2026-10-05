@@ -63,17 +63,65 @@ class BilibiliConfig:
     cookies_path: str = field(
         default_factory=lambda: _env("BILIBILI_COOKIES_PATH", "cookies.txt")
     )
+    uploader_mids: list[int] = field(
+        default_factory=lambda: [
+            int(x.strip()) for x in _env("BILIBILI_UPLOADER_MIDS", "").split(",") if x.strip()
+        ]
+    )
 
 
 @dataclass(frozen=True)
 class BarcodeAPIConfig:
-    aliyun_key: str = field(default_factory=lambda: _env("BARCODE_API_KEY", ""))
-    aliyun_url: str = field(
-        default_factory=lambda: _env(
-            "BARCODE_API_URL",
-            "https://market.aliyun.com/apimarket/product/BarcodeQuery",
-        )
+    """阿里云条形码查询 API (showapi).
+
+    curl 示例:
+        curl --get 'https://ali-barcode.showapi.com/barcode?code=6938166920785' \\
+             -H 'Authorization:APPCODE {appcode}'
+    """
+    appcode: str = field(default_factory=lambda: _env("BARCODE_API_KEY", ""))
+    url: str = field(
+        default_factory=lambda: _env("BARCODE_API_URL", "https://ali-barcode.showapi.com/barcode")
     )
+    timeout: int = field(default_factory=lambda: _env_int("BARCODE_API_TIMEOUT", 10))
+
+
+@dataclass(frozen=True)
+class OCRConfig:
+    """酒标 OCR 配置（裁决 C12：中文背标主识别路径）。
+
+    默认走 OpenAI 兼容 /chat/completions 多模态接口，
+    api_key/base_url 留空时回落到 LLM_API_KEY / LLM_BASE_URL。
+    model 必须是所配网关上**存在的多模态模型**：
+        - 标准百炼：qwen-vl-ocr / qwen-vl-plus
+        - token-plan 网关：qwen3.8-flash / qwen3.8-max（无 qwen-vl 系列）
+    阿里云读光等其他 OCR 可在 server/services/ocr.py 增加 provider 分支接入。
+
+    provider:
+        qwen_vl - OpenAI 兼容多模态 chat 识图（默认）
+        none    - 禁用 OCR，仅允许 text 透传（调试）
+    """
+    provider: str = field(default_factory=lambda: _env("OCR_PROVIDER", "qwen_vl"))
+    api_key: str = field(default_factory=lambda: _env("OCR_API_KEY", ""))
+    base_url: str = field(default_factory=lambda: _env("OCR_BASE_URL", ""))
+    model: str = field(default_factory=lambda: _env("OCR_MODEL", "qwen-vl-ocr"))
+    timeout: int = field(default_factory=lambda: _env_int("OCR_TIMEOUT", 60))
+
+
+@dataclass(frozen=True)
+class LLMConfig:
+    """LLM configuration (OpenAI-compatible API).
+
+    Supports: 百炼 DashScope, OpenAI, DeepSeek, Moonshot, 中转代理等
+    任何兼容 /v1/chat/completions 的服务均可。
+    """
+    api_key: str = field(default_factory=lambda: _env("LLM_API_KEY", ""))
+    base_url: str = field(
+        default_factory=lambda: _env("LLM_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+    )
+    model: str = field(default_factory=lambda: _env("LLM_MODEL", "qwen-plus"))
+    temperature: float = field(default_factory=lambda: float(_env("LLM_TEMPERATURE", "0.1")))
+    max_tokens: int = field(default_factory=lambda: _env_int("LLM_MAX_TOKENS", 4096))
+    timeout: int = field(default_factory=lambda: _env_int("LLM_TIMEOUT", 120))
 
 
 @dataclass(frozen=True)
@@ -86,6 +134,8 @@ class AppConfig:
     redis: RedisConfig = field(default_factory=RedisConfig)
     bilibili: BilibiliConfig = field(default_factory=BilibiliConfig)
     barcode_api: BarcodeAPIConfig = field(default_factory=BarcodeAPIConfig)
+    ocr: OCRConfig = field(default_factory=OCRConfig)
+    llm: LLMConfig = field(default_factory=LLMConfig)
 
 
 # Singleton config instance

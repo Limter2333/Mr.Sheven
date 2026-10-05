@@ -20,7 +20,9 @@ Mr.Sheven/
 ├── deploy/          # Docker Compose、nginx
 ├── docs/            # 项目文档
 ├── app/             # Flutter 前端
-└── probe/           # 探针实验物料
+├── scripts/         # 启动脚本（run_frontend.sh 会 tee 日志到 logs/frontend/）
+├── logs/            # 运行日志 {backend,pipeline,frontend}（不入库）
+└── probe/           # 探针实验物料（不入库）
 ```
 
 ## 测试命令
@@ -42,4 +44,4 @@ python -m pytest tests/ -v --tb=short
 - 后端：FastAPI + SQLAlchemy + MySQL 8.0 + Redis
 - 客户端：Flutter（原生App）
 - LLM：百炼 qwen-plus
-- MVP仅扫码（条形码），不做OCR和ASR
+- MVP识别 = OCR中文背标主路径 + 条码快速通道（裁决C12，2026-10-04）；不做ASR强攻
