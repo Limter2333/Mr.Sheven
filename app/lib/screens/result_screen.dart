@@ -383,6 +383,11 @@ class ResultScreen extends StatelessWidget {
   /// 查无此酒
   Widget _buildNotFound(BuildContext context) {
     final theme = Theme.of(context);
+    // 背标识别链路带 ocr_fields；条码链路没有
+    final isLabelScan = result.ocrFields != null;
+    final ocrName = (result.ocrProductName ?? '').trim();
+    final readFailed = isLabelScan && ocrName.isEmpty;
+    final reason = (result.reason ?? '').trim();
 
     return ConstrainedBox(
       constraints: BoxConstraints(
@@ -393,30 +398,82 @@ class ResultScreen extends StatelessWidget {
         children: [
           const SizedBox(height: 40),
           Icon(
-            Icons.search_off,
+            readFailed
+                ? Icons.photo_camera_back
+                : (isLabelScan ? Icons.wine_bar : Icons.search_off),
             size: 64,
             color: theme.colorScheme.onSurfaceVariant,
           ),
           const SizedBox(height: 16),
           Text(
-            '未找到该商品信息',
+            readFailed
+                ? '没看清酒标'
+                : (isLabelScan ? '暂无博主评测' : '未找到该商品信息'),
             style: theme.textTheme.titleLarge,
           ),
           const SizedBox(height: 8),
           Text(
-            '这可能是未收录的冷门酒或商品码已失效。\n也可以拍中文背标识别（进口酒条码常查不到）',
+            readFailed
+                ? '照片里没能读出酒款名称。\n避开反光、让中文背标占满取景框，再拍一张试试。'
+                : (isLabelScan
+                    ? '识别为「$ocrName」，但这款酒还没有被博主评测过。\n在酒圈里，没有口碑的酒往往意味着风险较高，建议谨慎购买。'
+                    : '这可能是未收录的冷门酒或商品码已失效。\n也可以拍中文背标识别（进口酒条码常查不到）'),
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
+          // 后端给的具体原因（如没拍清的重拍提示、匹配判否的理由）
+          if (reason.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              reason,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.outline,
+              ),
+            ),
+          ],
+          // 兜底候选：相似度低≠同款，明确标"仅供参考"
+          if (result.fallback.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            Text('库里最接近的几款（仅供参考）：', style: theme.textTheme.bodyMedium),
+            const SizedBox(height: 8),
+            ...result.fallback.map((item) => ListTile(
+                  leading: const Icon(Icons.wine_bar),
+                  title: Text(item.name),
+                  subtitle: (item.brand != null && item.brand!.isNotEmpty)
+                      ? Text(item.brand!)
+                      : null,
+                  trailing: item.score != null
+                      ? Text(
+                          '相似 ${item.score!.round()}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.outline,
+                          ),
+                        )
+                      : null,
+                  dense: true,
+                )),
+          ],
           const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: () => startLabelScan(context),
-            icon: const Icon(Icons.photo_camera_back),
-            label: const Text('拍中文背标识别'),
-          ),
-          const SizedBox(height: 12),
+          if (!isLabelScan) ...[
+            ElevatedButton.icon(
+              onPressed: () => startLabelScan(context),
+              icon: const Icon(Icons.photo_camera_back),
+              label: const Text('拍中文背标识别'),
+            ),
+            const SizedBox(height: 12),
+          ] else if (readFailed) ...[
+            ElevatedButton.icon(
+              onPressed: () => startLabelScan(context),
+              icon: const Icon(Icons.photo_camera_back),
+              label: const Text('重拍背标'),
+            ),
+            const SizedBox(height: 12),
+          ],
           OutlinedButton.icon(
             onPressed: () {
               Navigator.push(

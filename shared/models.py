@@ -208,3 +208,21 @@ class ScanLog(Base):
         Index("idx_barcode", "barcode"),
         Index("idx_created", "created_at"),
     )
+
+
+class Feedback(Base):
+    """用户反馈 / 催更 / 问题报告（App 内提交落库）。"""
+
+    __tablename__ = "feedback"
+
+    id: Mapped[int] = mapped_column(BIGINT, primary_key=True, autoincrement=True)
+    barcode: Mapped[Optional[str]] = mapped_column(VARCHAR(32))
+    taste: Mapped[Optional[str]] = mapped_column(VARCHAR(20))  # 口感标签（可选）
+    content: Mapped[str] = mapped_column(TEXT, nullable=False)
+    ip_hash: Mapped[Optional[str]] = mapped_column(CHAR(64))
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+
+    __table_args__ = (
+        Index("idx_fb_barcode", "barcode"),
+        Index("idx_fb_created", "created_at"),
+    )

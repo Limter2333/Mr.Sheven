@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import 'package:mr_sheven/screens/feedback_screen.dart';
+import 'package:mr_sheven/services/api_service.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -6,6 +10,7 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final api = context.watch<ApiService>();
 
     return Scaffold(
       appBar: AppBar(
@@ -13,6 +18,17 @@ class SettingsScreen extends StatelessWidget {
       ),
       body: ListView(
         children: [
+          // Server connection section（同源自动检测；仅异常时手动指定，地址不显式写出）
+          const _SectionHeader(title: '连接'),
+          ListTile(
+            leading: const Icon(Icons.dns_outlined),
+            title: const Text('服务器地址'),
+            subtitle: const Text('自动检测（点击可手动指定）'),
+            trailing: const Icon(Icons.edit_outlined),
+            onTap: () => _showServerDialog(context, api),
+          ),
+          const Divider(),
+
           // App info section
           const _SectionHeader(title: '关于'),
           ListTile(
@@ -39,11 +55,11 @@ class SettingsScreen extends StatelessWidget {
 
           // Privacy section
           const _SectionHeader(title: '隐私与权限'),
-          ListTile(
-            leading: const Icon(Icons.camera_alt),
-            title: const Text('相机权限'),
-            subtitle: const Text('用于扫描酒瓶条形码'),
-            trailing: const Icon(Icons.check_circle, color: Colors.green),
+          const ListTile(
+            leading: Icon(Icons.camera_alt),
+            title: Text('相机权限'),
+            subtitle: Text('用于扫描条形码、拍摄/选取酒标图片'),
+            trailing: Icon(Icons.check_circle, color: Colors.green),
           ),
           ListTile(
             leading: const Icon(Icons.privacy_tip),
@@ -59,9 +75,11 @@ class SettingsScreen extends StatelessWidget {
             title: const Text('报告问题'),
             subtitle: const Text('遇到 bug？告诉我们'),
             onTap: () {
-              // TODO: Open issue tracker or feedback form
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('反馈功能开发中...')),
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const FeedbackScreen(barcode: ''),
+                ),
               );
             },
           ),
@@ -69,10 +87,13 @@ class SettingsScreen extends StatelessWidget {
             leading: const Icon(Icons.star),
             title: const Text('给我们评分'),
             subtitle: const Text('如果觉得好用，给我们一个好评吧'),
-            onTap: () {
-              // TODO: Open app store rating
+            onTap: () async {
+              await Clipboard.setData(
+                const ClipboardData(text: 'https://github.com/Limter2333'),
+              );
+              if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('评分功能开发中...')),
+                const SnackBar(content: Text('已将链接复制到粘贴板，复制到浏览器使用')),
               );
             },
           ),
@@ -81,7 +102,7 @@ class SettingsScreen extends StatelessWidget {
           // Footer
           Center(
             child: Text(
-              'Mr.Sheven © 2026\n仅扫码，不做OCR',
+              'Mr.Sheven © 2026\n扫码 + 拍酒标识别',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
@@ -91,6 +112,64 @@ class SettingsScreen extends StatelessWidget {
           const SizedBox(height: 32),
         ],
       ),
+    );
+  }
+
+  void _showServerDialog(BuildContext context, ApiService api) {
+    final controller = TextEditingController(text: api.baseUrl);
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        String? error;
+        return StatefulBuilder(
+          builder: (ctx, setState) => AlertDialog(
+            title: const Text('服务器地址'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: controller,
+                  keyboardType: TextInputType.url,
+                  decoration: InputDecoration(
+                    hintText: 'https://…',
+                    helperText: '留空则自动检测；异常时可手动指定服务地址',
+                    errorText: error,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  controller.text = ApiService.defaultBaseUrl;
+                  setState(() => error = null);
+                },
+                child: const Text('恢复默认'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final url = controller.text.trim();
+                  if (!ApiService.isValidBaseUrl(url)) {
+                    setState(() => error = '格式不对，应形如 http://主机:端口');
+                    return;
+                  }
+                  api.setBaseUrl(url);
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('服务器地址已保存')),
+                  );
+                },
+                child: const Text('保存'),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -118,13 +197,13 @@ class SettingsScreen extends StatelessWidget {
           child: Text(
             'Mr.Sheven 酒评速查 隐私政策\n\n'
             '1. 数据收集\n'
-            '   - 本应用仅收集扫码记录（条码、时间）用于服务优化\n'
+            '   - 本应用仅收集扫码/识别记录（条码、酒款、时间）用于服务优化\n'
             '   - 不收集个人身份信息\n'
             '   - 不收集位置信息\n\n'
-            '2. 相机权限\n'
-            '   - 仅用于扫描酒瓶条形码\n'
-            '   - 不进行拍照或录像\n'
-            '   - 不上传任何图像数据\n\n'
+            '2. 相机与图片\n'
+            '   - 相机用于扫描条形码、拍摄酒标图片\n'
+            '   - 酒标图片仅用于识别酒款文字，识别完成后不保存图片\n'
+            '   - 不将图片用于其他用途或提供给第三方\n\n'
             '3. 数据存储\n'
             '   - 扫码记录存储在安全的服务器上\n'
             '   - 不与第三方共享用户数据\n\n'

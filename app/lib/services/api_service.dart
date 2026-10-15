@@ -3,16 +3,71 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:mr_sheven/models/scan_result.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// API service for communicating with Mr.Sheven backend.
 class ApiService extends ChangeNotifier {
-  // TODO: Make configurable via settings
-  // static const String _baseUrl = 'http://10.0.2.2:8000'; // Android emulator
-  static const String _baseUrl = 'http://localhost:8000'; // Web / iOS simulator / Desktop
+  /// 默认后端地址。
+  /// 发布版 Web（flutter build web，后端同源托管）直接用页面地址，单映射免配置；
+  /// 调试（flutter run 端口 8080）与原生端回落本机后端，可在设置页覆盖。
+  static String get defaultBaseUrl {
+    if (kIsWeb && kReleaseMode) {
+      return Uri.base.origin;
+    }
+    return 'http://localhost:8000';
+  }
+
+  static const String _prefsKey = 'api_base_url';
+
+  String _baseUrl = defaultBaseUrl;
+
+  /// 当前后端地址（无尾部斜杠）
+  String get baseUrl => _baseUrl;
 
   bool _isLoading = false;
   String? _error;
   ScanResult? _lastResult;
+
+  /// 启动时读取持久化的服务器地址（main 中 await）。
+  Future<void> init() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString(_prefsKey);
+      if (saved != null && saved.isNotEmpty) {
+        _baseUrl = _normalizeBaseUrl(saved);
+      }
+    } catch (e) {
+      debugPrint('Load api base url failed: $e');
+    }
+  }
+
+  /// 保存并生效新的后端地址（如花生壳映射后的 http://xxx.oicp.net:端口）。
+  Future<void> setBaseUrl(String url) async {
+    _baseUrl = _normalizeBaseUrl(url);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_prefsKey, _baseUrl);
+    } catch (e) {
+      debugPrint('Save api base url failed: $e');
+    }
+    notifyListeners();
+  }
+
+  /// 地址格式校验：需带 http/https 协议头与主机名。
+  static bool isValidBaseUrl(String url) {
+    final uri = Uri.tryParse(url.trim());
+    return uri != null &&
+        (uri.isScheme('http') || uri.isScheme('https')) &&
+        uri.host.isNotEmpty;
+  }
+
+  static String _normalizeBaseUrl(String url) {
+    var u = url.trim();
+    while (u.endsWith('/')) {
+      u = u.substring(0, u.length - 1);
+    }
+    return u.isEmpty ? defaultBaseUrl : u;
+  }
 
   bool get isLoading => _isLoading;
   String? get error => _error;
@@ -139,15 +194,30 @@ class ApiService extends ChangeNotifier {
     return null;
   }
 
-  /// Submit feedback (placeholder).
+  /// Submit feedback (报告问题/催更)，落库到 feedback 表。
   Future<bool> submitFeedback({
     required String barcode,
     required String feedback,
     String? taste,
   }) async {
-    // TODO: Implement feedback API endpoint
-    debugPrint('Feedback submitted: $barcode - $feedback');
-    return true;
+    try {
+      final uri = Uri.parse('$_baseUrl/api/v1/feedback');
+      final response = await http
+          .post(
+            uri,
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({
+              'barcode': barcode.trim().isEmpty ? null : barcode.trim(),
+              'taste': taste,
+              'feedback': feedback.trim(),
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint('Feedback submit error: $e');
+      return false;
+    }
   }
 
   void clearResult() {

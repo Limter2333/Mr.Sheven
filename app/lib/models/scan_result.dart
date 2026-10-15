@@ -192,13 +192,19 @@ class ReviewData {
 class FallbackItem {
   final int spuId;
   final String name;
+  final String? brand;
 
-  FallbackItem({required this.spuId, required this.name});
+  /// 候选相似度（0-100，匹配分而非酒的评分）
+  final double? score;
+
+  FallbackItem({this.spuId = 0, required this.name, this.brand, this.score});
 
   factory FallbackItem.fromJson(Map<String, dynamic> json) {
     return FallbackItem(
       spuId: json['spu_id'] ?? 0,
       name: json['name'] ?? '',
+      brand: json['brand'],
+      score: (json['score'] as num?)?.toDouble(),
     );
   }
 }

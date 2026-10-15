@@ -42,9 +42,7 @@ Future<void> startLabelScan(BuildContext context) async {
   );
   if (file == null || !context.mounted) return;
 
-  final bytes = await file.readAsBytes();
-  if (!context.mounted) return;
-
+  // 选完图立刻弹加载框，再读字节/上传（读文件本身也有耗时）
   final api = context.read<ApiService>();
   // OCR + LLM 匹配耗时较长，给阻塞式加载动画，避免页面"假死"
   final closeLoading = showLoadingDialog(
@@ -57,6 +55,8 @@ Future<void> startLabelScan(BuildContext context) async {
       '快好了，请稍候…',
     ],
   );
+
+  final bytes = await file.readAsBytes();
   final result = await api.scanLabel(imageBytes: bytes);
   closeLoading();
   if (!context.mounted) return;

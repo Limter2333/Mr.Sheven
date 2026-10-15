@@ -22,6 +22,9 @@ logger = logging.getLogger("server.ocr")
 ALLOWED_MIME_TYPES = frozenset({"image/jpeg", "image/png", "image/webp"})
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
+# 背标正常能读出上百字；低于该值视为漏识别，触发重试取最优
+MIN_VALID_CHARS = 30
+
 OCR_PROMPT = "请识别图片中的全部文字，保持原有换行顺序输出，不要翻译、不要总结、不要遗漏。"
 
 
@@ -64,6 +67,9 @@ def validate_image(image_bytes: bytes, mime_type: str) -> str:
 async def ocr_image(image_bytes: bytes, mime_type: str = "image/jpeg") -> str:
     """识别酒标图片，返回全文文本。
 
+    多模态模型对同一张图的输出存在随机性（时多时少），这里对"识别过短"
+    的结果自动重试，取最全的一次，压掉时好时坏的波动。
+
     Raises:
         ValueError: 图片非法
         OCRUnavailableError: OCR 未配置
@@ -77,7 +83,22 @@ async def ocr_image(image_bytes: bytes, mime_type: str = "image/jpeg") -> str:
     if provider != "qwen_vl":
         raise OCRUnavailableError(f"未知 OCR provider: {provider}")
 
-    return await _ocr_qwen_vl(image_bytes, mime_type)
+    best = ""
+    attempts = 3
+    for i in range(1, attempts + 1):
+        text = await _ocr_qwen_vl(image_bytes, mime_type)
+        if len(text) > len(best):
+            best = text
+        # 背标正常能读出上百字；过短多半是漏识别，重试
+        if len(best) >= MIN_VALID_CHARS:
+            return best
+        if i < attempts:
+            logger.info("[ocr] 短结果 (%d chars)，第 %d 次重试", len(best), i)
+
+    if not best:
+        raise OCRError("OCR 未识别到文字，请重拍（避反光、让背标占满取景框）")
+    logger.info("[ocr] %d 次尝试后仍偏短 (%d chars)，尽力返回", attempts, len(best))
+    return best
 
 
 async def _ocr_qwen_vl(image_bytes: bytes, mime_type: str) -> str:
@@ -100,6 +121,9 @@ async def _ocr_qwen_vl(image_bytes: bytes, mime_type: str) -> str:
             }
         ],
         "temperature": 0.0,
+        "top_p": 1.0,
+        # 固定 seed 压采样随机性：同一张图多次识别尽量输出一致
+        "seed": 42,
         "enable_thinking": False,
     }
 
@@ -141,9 +165,6 @@ async def _ocr_qwen_vl(image_bytes: bytes, mime_type: str) -> str:
     if isinstance(text, list):
         text = "".join(str(seg.get("text", "")) for seg in text if isinstance(seg, dict))
     text = str(text).strip()
-
-    if not text:
-        raise OCRError("OCR 未识别到文字，请重拍（避反光、让背标占满取景框）")
 
     logger.info("[ocr] Recognized %d chars", len(text))
     return text

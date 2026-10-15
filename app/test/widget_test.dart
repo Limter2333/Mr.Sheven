@@ -59,6 +59,8 @@ void main() {
       expect(result.isNotFound, isTrue);
       expect(result.fallback, hasLength(1));
       expect(result.fallback.first.name, '奥兰小红帽珍藏');
+      expect(result.fallback.first.brand, '奥兰');
+      expect(result.fallback.first.score, 55.0);
     });
   });
 }
