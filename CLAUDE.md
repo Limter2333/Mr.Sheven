@@ -20,6 +20,7 @@ Mr.Sheven/
 ├── deploy/          # Docker Compose、nginx
 ├── docs/            # 项目文档
 ├── app/             # Flutter 前端
+├── ops/             # 运维手册：服务链路/一键启动/全链路自检（bash ops/check.sh，不入库）
 ├── scripts/         # 启动脚本（run_frontend.sh 会 tee 日志到 logs/frontend/）
 ├── logs/            # 运行日志 {backend,pipeline,frontend}（不入库）
 └── probe/           # 探针实验物料（不入库）

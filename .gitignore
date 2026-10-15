@@ -23,6 +23,8 @@ env/
 .env
 .env.*
 secrets/
+# frp 配置含真实 token，不入库（模板见 ops/README.md 第 7 节）
+scripts/frp/*.toml
 cookies.txt
 cookie.txt
 cookies_netscape.txt
@@ -42,6 +44,9 @@ Thumbs.db
 
 # Probe experiment materials（探针实验物料，整目录不入库）
 probe/
+
+# Ops manual（运维手册含服务器 IP/拓扑，整目录不入库）
+ops/
 
 # Docker
 deploy/mysql/data/
